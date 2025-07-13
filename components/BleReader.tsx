@@ -41,6 +41,7 @@ export default function BleReader() {
   const stageOrderRef = useRef<number>(1);
   const characteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [initialStage, setInitialStage] = useState<Stage | null>(null);
 
   // Start session timer
   const startSession = () => {
@@ -51,7 +52,7 @@ export default function BleReader() {
     stageStartTimeRef.current = Date.now();
     setStageHistory([]);
     setData([]);
-    setCurrentStage(null);
+    setCurrentStage(initialStage); // Use selected initial stage
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setTimer((prev) => {
@@ -224,7 +225,29 @@ export default function BleReader() {
         <button onClick={connect} className="mb-4 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition dark:bg-purple-800 dark:hover:bg-purple-700">Connect to EEG Device</button>
       )}
       {participantSaved && bleState === "connected" && !sessionActive && !sessionEnded && (
-        <button onClick={startSession} className="mb-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition">Start 3-min Session</button>
+        <>
+          <div className="mb-4 flex gap-2">
+            <button
+              onClick={() => setInitialStage("focus")}
+              className={`px-3 py-1 rounded ${initialStage === "focus" ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}
+            >
+              Start as Focus
+            </button>
+            <button
+              onClick={() => setInitialStage("non-focus")}
+              className={`px-3 py-1 rounded ${initialStage === "non-focus" ? "bg-red-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}
+            >
+              Start as Non-Focus
+            </button>
+          </div>
+          <button
+            onClick={startSession}
+            className="mb-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+            disabled={!initialStage}
+          >
+            Start 3-min Session
+          </button>
+        </>
       )}
       {sessionActive && (
         <div className="mb-4 flex items-center gap-4">

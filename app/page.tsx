@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import BleReader from "@/components/BleReader";
 import AuthWrapper from "@/components/admin/auth-wrapper";
 import { isAuthenticated } from "@/app/actions/config";
