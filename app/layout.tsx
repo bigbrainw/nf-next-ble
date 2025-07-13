@@ -20,7 +20,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: siteConfig.name,
   description: siteConfig.description,
-  manifest: "/icons/site.webmanifest",
+  // manifest: "/icons/site.webmanifest",
   generator: "Next.js",
   openGraph: {
     title: siteConfig.name,
