@@ -40,18 +40,27 @@ export default function AuthWrapper({ children, isAuthenticated }: AuthWrapperPr
     setError('');
     startTransition(async () => {
       try {
-        await authenticateAdmin(formData);
-        toast({
-          title: "Admin Page",
-              description: "Login successful",
-        })  
+        const result: any = await authenticateAdmin(formData);
+        if (result && result.success) {
+          toast({
+            title: "Admin Page",
+            description: "Login successful",
+          });
+          router.push('/');
+        } else {
+          setError('Invalid credentials');
+          toast({
+            title: "Admin Page",
+            description: "Login failed",
+          });
+        }
       } catch (err) {
         setError('Invalid credentials');
         toast({
           title: "Admin Page",
           description: "Login failed",
-        })  
-        }
+        });
+      }
     });
   };
 
@@ -121,13 +130,13 @@ export default function AuthWrapper({ children, isAuthenticated }: AuthWrapperPr
 
   return (
     <div className="min-h-screen bg-gray-950 dark:bg-gray-950 relative">
-      <button
+      <Button
         onClick={handleLogout}
         disabled={isPending}
         className="absolute top-4 right-4 px-4 py-2 rounded bg-gray-800 text-gray-100 border border-gray-700 hover:bg-gray-700 transition"
       >
         {isPending ? 'Logout...' : 'Logout'}
-      </button>
+      </Button>
       {children}
     </div>
   );

@@ -64,7 +64,7 @@ export async function authenticateAdmin(formData: FormData) {
         secure: process.env.NODE_ENV === 'production',
         maxAge: 60 * 60 * 24 // 24 hours
       })
-      redirect('/admin')
+      return { success: true }
     } else {
       throw new AdminActionError('Буруу нэвтрэх мэдээлэл', 'INVALID_CREDENTIALS')
     }

@@ -1,11 +1,13 @@
 "use client";
 import React, { useState, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { Button } from "@/components/ui/button";
+import { processEegData } from "@/lib/eegUtils";
 
 const SERVICE_UUID = "0338ff7c-6251-4029-a5d5-24e4fa856c8d";
 const CHARACTERISTIC_UUID = "ad615f2b-cc93-4155-9e4d-f5f32cb9a2d7";
 
-const SESSION_DURATION = 3 * 60; // 3 minutes in seconds
+const SESSION_DURATION = 15; // 15 seconds for debug
 
 type BleState = "idle" | "scanning" | "connecting" | "connected" | "error";
 type Stage = "focus" | "non-focus";
@@ -218,35 +220,35 @@ export default function BleReader() {
             className="flex-1 px-3 py-2 rounded bg-gray-100 dark:bg-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-700"
             required
           />
-          <button type="submit" className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition dark:bg-purple-800 dark:hover:bg-purple-700">Save</button>
+          <Button type="submit" className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition dark:bg-purple-800 dark:hover:bg-purple-700">Save</Button>
         </form>
       ) : null}
       {participantSaved && bleState === "idle" && !sessionActive && !sessionEnded && (
-        <button onClick={connect} className="mb-4 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition dark:bg-purple-800 dark:hover:bg-purple-700">Connect to EEG Device</button>
+        <Button onClick={connect} className="mb-4 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition dark:bg-purple-800 dark:hover:bg-purple-700">Connect to EEG Device</Button>
       )}
       {participantSaved && bleState === "connected" && !sessionActive && !sessionEnded && (
         <>
           <div className="mb-4 flex gap-2">
-            <button
+            <Button
               onClick={() => setInitialStage("focus")}
               className={`px-3 py-1 rounded ${initialStage === "focus" ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}
             >
               Start as Focus
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setInitialStage("non-focus")}
               className={`px-3 py-1 rounded ${initialStage === "non-focus" ? "bg-red-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}
             >
               Start as Non-Focus
-            </button>
+            </Button>
           </div>
-          <button
+          <Button
             onClick={startSession}
             className="mb-4 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
             disabled={!initialStage}
           >
-            Start 3-min Session
-          </button>
+            Start Session
+          </Button>
         </>
       )}
       {sessionActive && (
@@ -263,10 +265,10 @@ export default function BleReader() {
       )}
       {sessionActive && (
         <div className="mb-4 flex gap-2">
-          <button onClick={() => handleStage("focus")}
-            className={`px-3 py-1 rounded ${currentStage === "focus" ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}>Focus</button>
-          <button onClick={() => handleStage("non-focus")}
-            className={`px-3 py-1 rounded ${currentStage === "non-focus" ? "bg-red-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}>Non-Focus</button>
+          <Button onClick={() => handleStage("focus")}
+            className={`px-3 py-1 rounded ${currentStage === "focus" ? "bg-green-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}>Focus</Button>
+          <Button onClick={() => handleStage("non-focus")}
+            className={`px-3 py-1 rounded ${currentStage === "non-focus" ? "bg-red-600 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-gray-100"}`}>Non-Focus</Button>
         </div>
       )}
       {bleState === "scanning" && <p>Scanning for device...</p>}
@@ -276,7 +278,7 @@ export default function BleReader() {
           <div className="mb-2 flex items-center justify-between">
             <span className="font-medium">Connected to:</span>
             <span className="text-purple-700 font-mono dark:text-purple-300">{deviceName}</span>
-            <button onClick={disconnect} className="ml-4 px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100">Disconnect</button>
+              <Button onClick={disconnect} className="ml-4 px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100">Disconnect</Button>
           </div>
           <div className="mb-2 text-sm text-gray-500 dark:text-gray-400">Streaming EEG data...</div>
         </>
@@ -303,6 +305,20 @@ export default function BleReader() {
           <h3 className="font-bold mb-2">Session Complete!</h3>
           <div>Stages recorded: {stageHistory.length}</div>
           <div className="mt-2 text-xs text-gray-400">(Ready to save to backend)</div>
+          <div className="mt-4">
+            {stageHistory.map((stage, i) => {
+              const samples = stage.eegData.map(d => d.value);
+              const result = processEegData(participant, samples);
+              return (
+                <div key={i} className="mb-2 p-2 rounded bg-gray-900">
+                  <div className="font-semibold">Stage {stage.stageOrder}: {stage.stageName}</div>
+                  <div>Focus Level: {result.focus_level ?? "-"}</div>
+                  <div>Beta Power: {result.beta_power?.toFixed(3) ?? "-"}</div>
+                  <div>Low Beta Warning: {result.low_beta_warning ? "Yes" : "No"}</div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
