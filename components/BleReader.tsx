@@ -5,6 +5,45 @@ import { Button } from "@/components/ui/button";
 import { processEegData } from "@/lib/eegUtils";
 import { saveSessionToDatabase } from "@/app/actions/saveSession";
 
+// Add Web Bluetooth API type declaration
+declare global {
+  interface Navigator {
+    bluetooth: {
+      requestDevice: (options: {
+        filters?: { services: string[] }[];
+        optionalServices?: string[];
+      }) => Promise<BluetoothDevice>;
+    };
+  }
+  
+  interface BluetoothDevice {
+    id: string;
+    name?: string;
+    gatt?: BluetoothRemoteGATTServer;
+  }
+  
+  interface BluetoothRemoteGATTServer {
+    connected: boolean;
+    connect(): Promise<BluetoothRemoteGATTServer>;
+    disconnect(): void;
+    getPrimaryService(service: string): Promise<BluetoothRemoteGATTService>;
+  }
+  
+  interface BluetoothRemoteGATTService {
+    device: BluetoothDevice;
+    getCharacteristic(characteristic: string): Promise<BluetoothRemoteGATTCharacteristic>;
+  }
+  
+  interface BluetoothRemoteGATTCharacteristic {
+    service: BluetoothRemoteGATTService;
+    value?: DataView;
+    addEventListener(type: string, listener: (event: Event) => void): void;
+    removeEventListener(type: string, listener: (event: Event) => void): void;
+    startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
+    stopNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
+  }
+}
+
 const SERVICE_UUID = "0338ff7c-6251-4029-a5d5-24e4fa856c8d";
 const CHARACTERISTIC_UUID = "ad615f2b-cc93-4155-9e4d-f5f32cb9a2d7";
 
@@ -61,92 +100,105 @@ export default function BleReader() {
 
   // Start session timer
   const startSession = () => {
-    console.log("Starting session with initial stage:", initialStage);
+    // console.log("Starting session with initial stage:", initialStage);
+    if (!initialStage) {
+      setError("Please select an initial stage first");
+      return;
+    }
+    setError(null);
+    setCurrentStage(initialStage); // Use selected initial stage
+    // console.log("Current stage set to:", initialStage);
+    stageStartTimeRef.current = Date.now();
+    stageOrderRef.current = 1;
     setSessionActive(true);
     setSessionEnded(false);
     setTimer(SESSION_DURATION);
-    stageOrderRef.current = 1;
-    stageStartTimeRef.current = Date.now();
-    setStageHistory([]);
     setData([]);
-    setCurrentStage(initialStage); // Use selected initial stage
-    console.log("Current stage set to:", initialStage);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
+    setIsStreaming(true);
+    // Start the countdown timer
+    const interval = setInterval(() => {
       setTimer((prev) => {
         if (prev <= 1) {
+          clearInterval(interval);
           endSession();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+    timerRef.current = interval;
   };
 
   // End session
   const endSession = () => {
-    console.log("Ending session, current stage:", currentStage);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    // console.log("Ending session, current stage:", currentStage);
     setSessionActive(false);
     setSessionEnded(true);
     setIsStreaming(false);
-    setBleState("idle");
-    if (timerRef.current) clearInterval(timerRef.current);
     
-    // Save last stage if active
+    // Save any remaining stage data
     if (currentStage && stageStartTimeRef.current) {
-      const stageEnd = Date.now();
-      const stageData = data.filter(d => d.timestamp >= stageStartTimeRef.current!);
-      console.log(`Adding stage ${currentStage} with ${stageData.length} data points`);
+      const now = Date.now();
+      const stageData = data.filter((d: EegDatum) => d.stage === currentStage);
+      // console.log(`Adding stage ${currentStage} with ${stageData.length} data points`);
       
-      setStageHistory(prev => {
-        const newHistory = [
-          ...prev,
-          {
-            stageName: currentStage,
-            stageOrder: stageOrderRef.current,
-            startTime: stageStartTimeRef.current!,
-            endTime: stageEnd,
-            eegData: stageData,
-          }
-        ];
-        console.log("Updated stage history:", newHistory);
+      const newStageData: StageData = {
+        stageName: currentStage,
+        stageOrder: stageOrderRef.current,
+        startTime: stageStartTimeRef.current,
+        endTime: now,
+        eegData: stageData,
+      };
+      
+      setStageHistory((prev: StageData[]) => {
+        const newHistory = [...prev, newStageData];
+        // console.log("Updated stage history:", newHistory);
         return newHistory;
       });
-    } else {
-      console.warn("No current stage or start time when ending session");
-      // Create a dummy stage if none exists, just to ensure we have something to save
+    }
+
+    // If no stages in history, create a fallback stage
+    if (stageHistory.length === 0 && data.length > 0) {
       if (initialStage && data.length > 0) {
-        console.log("Creating fallback stage with initial stage:", initialStage);
-        setStageHistory([{
+        // console.log("Creating fallback stage with initial stage:", initialStage);
+        const fallbackStage: StageData = {
           stageName: initialStage,
           stageOrder: 1,
-          startTime: Date.now() - 10000, // 10 seconds ago
+          startTime: Date.now() - SESSION_DURATION * 1000,
           endTime: Date.now(),
-          eegData: data.slice(-50).map(d => ({
+          eegData: data.map((d: EegDatum) => ({
             ...d,
             stage: initialStage // Ensure stage is set properly
           })),
-        }]);
-      } else if (data.length > 0) {
-        // If no initialStage was set, default to first stage type
-        console.log("Creating default fallback stage");
-        setStageHistory([{
+        };
+        setStageHistory([fallbackStage]);
+      } else {
+        // If no initialStage was set, default to first stage type  
+        // console.log("Creating default fallback stage");
+        const fallbackStage: StageData = {
           stageName: "1_Baseline_Relaxed",
           stageOrder: 1,
-          startTime: Date.now() - 10000, // 10 seconds ago
+          startTime: Date.now() - SESSION_DURATION * 1000,
           endTime: Date.now(),
-          eegData: data.slice(-50).map(d => ({
+          eegData: data.map((d: EegDatum) => ({
             ...d,
-            stage: "1_Baseline_Relaxed" // Set default stage
+            stage: "1_Baseline_Relaxed" // Default stage
           })),
-        }]);
+        };
+        setStageHistory([fallbackStage]);
       }
     }
     
-    // Debug check after a short delay to see if stageHistory was updated
+    // Clear the timer and current stage 
+    setCurrentStage(null);
+    
     setTimeout(() => {
-      console.log("Stage history after timeout:", stageHistory);
-    }, 500);
+      // console.log("Stage history after timeout:", stageHistory);
+    }, 100);
   };
 
   // Switch stage
@@ -213,7 +265,7 @@ export default function BleReader() {
     const num = parseInt(str, 10);
     if (!isNaN(num)) {
       // Make sure the stage is properly attached to each data point
-      setData((prev) => [
+      setData((prev: EegDatum[]) => [
         ...prev.slice(-99),
         { 
           value: num, 

@@ -25,7 +25,7 @@ export default function AuthWrapper({ children, isAuthenticated }: AuthWrapperPr
     // Check if we're on localhost
     const checkHost = () => {
       const host = window.location.host;
-        const localhost = host.startsWith('localhost:') || host.startsWith('127.0.0.1:') || host.startsWith('nf-next-ble.vercel.app');
+        const localhost = host.startsWith('localhost:') || host.startsWith('127.0.0.1:');
       setIsLocalhost(localhost);
       
       if (!localhost) {

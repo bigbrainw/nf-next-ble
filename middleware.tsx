@@ -7,8 +7,8 @@ export function middleware(request: NextRequest) {
     // Get the host from the request
     const host = request.headers.get('host') || ''
     
-    // Allow access if on localhost:3000 or nf-next-ble.vercel.app
-    const isAllowedHost = host.startsWith('localhost:3000') || host === 'nf-next-ble.vercel.app'
+    // Allow access only on localhost
+    const isAllowedHost = host.startsWith('localhost:')
     
     if (!isAllowedHost) {
       // Block access to admin routes for non-allowed hosts
