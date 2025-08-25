@@ -8,28 +8,7 @@ import { saveSessionToDatabase } from "@/app/actions/saveSession";
 const SERVICE_UUID = "0338ff7c-6251-4029-a5d5-24e4fa856c8d";
 const CHARACTERISTIC_UUID = "ad615f2b-cc93-4155-9e4d-f5f32cb9a2d7";
 
-// Stage configuration with durations and instructions
-const STAGE_CONFIG = {
-  "1_Baseline_Relaxed": {
-    duration: 180, // 3 minutes
-    instructions: "Close your eyes, relax, and listen to calming music or nature sounds."
-  },
-  "2_Cognitive_Warmup": {
-    duration: 120, // 2 minutes
-    instructions: "Do simple tasks like basic arithmetic or identify colors. Nothing too hard."
-  },
-  "3_Focused_Task": {
-    duration: 360, // 6 minutes
-    instructions: "Perform a focused task (e.g., mental math, reading, or debugging). Stay concentrated."
-  },
-  "4_Post_Task_Rest": {
-    duration: 180, // 3 minutes
-    instructions: "Return to a relaxed state. Breathe deeply, eyes closed, no task."
-  }
-} as const;
-
-// Total experiment duration (14 minutes = 840 seconds)
-const TOTAL_EXPERIMENT_DURATION = Object.values(STAGE_CONFIG).reduce((sum, stage) => sum + stage.duration, 0);
+const SESSION_DURATION = 15; // 15 seconds for debug
 
 type BleState = "idle" | "scanning" | "connecting" | "connected" | "error";
 type Stage = 
@@ -63,7 +42,7 @@ export default function BleReader() {
   const [stageHistory, setStageHistory] = useState<StageData[]>([]);
   const [sessionActive, setSessionActive] = useState(false);
   const [sessionEnded, setSessionEnded] = useState(false);
-  const [timer, setTimer] = useState(0); // Will be set based on current stage
+  const [timer, setTimer] = useState(SESSION_DURATION);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const stageStartTimeRef = useRef<number | null>(null);
   const stageOrderRef = useRef<number>(1);
@@ -80,51 +59,12 @@ export default function BleReader() {
     "4_Post_Task_Rest"
   ];
 
-  // Auto-advance to next stage when timer expires
-  const autoAdvanceStage = () => {
-    if (!currentStage) return;
-    
-    // Save current stage data
-    if (stageStartTimeRef.current) {
-      const stageEnd = Date.now();
-      const stageData = data.filter(d => d.timestamp >= stageStartTimeRef.current!);
-      console.log(`Auto-advancing from stage ${currentStage} with ${stageData.length} data points`);
-      
-      setStageHistory(prev => [
-        ...prev,
-        {
-          stageName: currentStage,
-          stageOrder: stageOrderRef.current,
-          startTime: stageStartTimeRef.current!,
-          endTime: stageEnd,
-          eegData: stageData,
-        },
-      ]);
-    }
-
-    // Check if there's a next stage
-    const nextOrder = stageOrderRef.current + 1;
-    if (nextOrder <= stageOrderList.length) {
-      // Move to next stage
-      const nextStage = stageOrderList[nextOrder - 1];
-      setCurrentStage(nextStage);
-      stageOrderRef.current = nextOrder;
-      stageStartTimeRef.current = Date.now();
-      setTimer(STAGE_CONFIG[nextStage].duration);
-      console.log(`Advanced to stage ${nextStage} with duration ${STAGE_CONFIG[nextStage].duration}s`);
-    } else {
-      // All stages completed, end session
-      endSession();
-    }
-  };
-
   // Start session timer
   const startSession = () => {
     console.log("Starting session with initial stage:", initialStage);
     setSessionActive(true);
     setSessionEnded(false);
-    const currentStageDuration = initialStage ? STAGE_CONFIG[initialStage].duration : STAGE_CONFIG["1_Baseline_Relaxed"].duration;
-    setTimer(currentStageDuration);
+    setTimer(SESSION_DURATION);
     stageOrderRef.current = 1;
     stageStartTimeRef.current = Date.now();
     setStageHistory([]);
@@ -231,6 +171,22 @@ export default function BleReader() {
     }
     setCurrentStage(stage);
     stageStartTimeRef.current = Date.now();
+    
+    // Update timer for new stage
+    const newStageDuration = getCurrentStageDuration(stage);
+    setTimer(newStageDuration);
+    
+    // Reset timer interval
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          endSession();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   // Connect to BLE device
@@ -428,13 +384,13 @@ export default function BleReader() {
     // Advance to next stage
     const nextOrder = stageOrderRef.current + 1;
     if (nextOrder <= stageOrderList.length) {
-      setCurrentStage(stageOrderList[nextOrder - 1]);
+      const nextStage = stageOrderList[nextOrder - 1];
+      setCurrentStage(nextStage);
       stageOrderRef.current = nextOrder;
       stageStartTimeRef.current = Date.now();
       setSessionActive(true);
       setSessionEnded(false);
-      const nextStageDuration = stageOrderList[nextOrder - 1] ? STAGE_CONFIG[stageOrderList[nextOrder - 1]].duration : 180;
-      setTimer(nextStageDuration);
+      setTimer(SESSION_DURATION);
       // Optionally clear data or keep accumulating
       setData([]);
     }
